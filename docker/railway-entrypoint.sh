@@ -120,8 +120,10 @@ setup_web_storage() {
 }
 
 install_mautic() {
-  local admin_email="${ADMIN_EMAIL:-}" admin_password="${ADMIN_PASSWORD:-}"
-  [ -n "${admin_email}" ] || die "ADMIN_EMAIL is required for the first install"
+  # ADMIN_EMAIL is optional so the Railway template deploys with zero inputs;
+  # change the admin's email in Mautic (Account > Profile) after the first login.
+  local admin_email="${ADMIN_EMAIL:-admin@example.com}" admin_password="${ADMIN_PASSWORD:-}"
+  [ -n "${ADMIN_EMAIL:-}" ] || log "ADMIN_EMAIL not set: using ${admin_email} for the admin user; change it after logging in"
   [ -n "${admin_password}" ] || die "ADMIN_PASSWORD is required for the first install"
   [ "${#admin_password}" -ge 12 ] || die "ADMIN_PASSWORD must be at least 12 characters"
 

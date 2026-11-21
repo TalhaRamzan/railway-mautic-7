@@ -302,6 +302,9 @@ volume** (`/data`: `config/local.php` and uploaded media).
 
 ## Troubleshooting
 
+### `AH00534: apache2: Configuration error: More than one MPM loaded`
+Railway's runtime can end up with a second Apache MPM enabled next to `mpm_prefork`. The entrypoint now removes `mpm_event` / `mpm_worker` from `mods-enabled` on every boot of the web service, so this should not happen with this template. If you build your own image from it, keep that step.
+
 | Symptom | Fix |
 |---|---|
 | Web deploy fails healthcheck on the first deploy | The install can take a few minutes; the healthcheck timeout should be 900 s (see railway-template.md). Check the web logs for `mautic:install failed`. |

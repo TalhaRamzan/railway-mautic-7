@@ -221,5 +221,18 @@ case "${ROLE}" in
   *) cron_or_worker ;;
 esac
 
+# Railway's runtime can end up with an extra MPM (mpm_event/mpm_worker) enabled next to
+# mpm_prefork, and Apache then refuses to start with "AH00534: More than one MPM loaded".
+# mod_php needs prefork, so keep exactly that one enabled on every boot.
+if [ "${ROLE}" = "mautic_web" ]; then
+  for mpm in event worker; do
+    if [ -e "/etc/apache2/mods-enabled/mpm_${mpm}.load" ]; then
+      log "disabling extra Apache MPM: mpm_${mpm}"
+      rm -f "/etc/apache2/mods-enabled/mpm_${mpm}.load" "/etc/apache2/mods-enabled/mpm_${mpm}.conf"
+    fi
+  done
+  [ -e /etc/apache2/mods-enabled/mpm_prefork.load ] || a2enmod -q mpm_prefork >/dev/null
+fi
+
 log "starting upstream entrypoint for ${ROLE}"
 exec /entrypoint.sh "$@"

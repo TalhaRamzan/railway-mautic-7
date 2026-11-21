@@ -63,7 +63,7 @@ e.g. `${{secret(32, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456
 | `MAUTIC_DB_DATABASE` | `${{MariaDB.MARIADB_DATABASE}}` | |
 | `MAUTIC_DB_USER` | `${{MariaDB.MARIADB_USER}}` | |
 | `MAUTIC_DB_PASSWORD` | `${{MariaDB.MARIADB_PASSWORD}}` | |
-| `ADMIN_EMAIL` | *(empty, required)* | Description: "Email of the first Mautic admin" |
+| `ADMIN_EMAIL` | *(optional)* | Description: "Email of the first Mautic admin (default admin@example.com)" |
 | `ADMIN_USERNAME` | `admin` | |
 | `ADMIN_PASSWORD` | `${{secret(24, ALNUM)}}` | |
 | `MAILER_DSN` | *(empty, optional)* | Description: "HTTP API email DSN, e.g. brevo+api://KEY@default. See README." |

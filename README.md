@@ -181,7 +181,7 @@ tracking traffic use more CPU and RAM. To keep the bill predictable:
 | `MAUTIC_DB_DATABASE` | `${{MariaDB.MARIADB_DATABASE}}` | |
 | `MAUTIC_DB_USER` | `${{MariaDB.MARIADB_USER}}` | |
 | `MAUTIC_DB_PASSWORD` | `${{MariaDB.MARIADB_PASSWORD}}` | |
-| `ADMIN_EMAIL` | *(asked at deploy)* | First admin's email. First boot only. |
+| `ADMIN_EMAIL` | *(optional)* | First admin's email. Falls back to `admin@example.com` if unset (change it in Mautic after login). First boot only. |
 | `ADMIN_USERNAME` | `admin` | First boot only. |
 | `ADMIN_PASSWORD` | `${{secret(24, ...)}}` | Random. First boot only. |
 | `MAILER_DSN` | *(empty)* | HTTP API transport, see [Email setup](#email-setup-required-to-send). |

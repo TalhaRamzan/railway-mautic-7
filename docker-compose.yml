@@ -1,0 +1,110 @@
+# LOCAL TESTING ONLY. Mirrors the Railway layout: one image, three Mautic roles
+# (web / cron / worker) + MariaDB. Differences from Railway:
+#   - the web service mounts named volumes at the upstream paths instead of one /data volume;
+#   - Mailpit catches outgoing mail (http://localhost:8025) because SMTP works locally.
+#
+#   cp .env.example .env   # then edit the passwords
+#   docker compose up -d --build
+#   open http://localhost:8080/s/login   (WEB_PORT in .env changes the host port)
+#
+# Requires Docker Compose v2.
+
+x-mautic-env: &mautic-env
+  MAUTIC_DB_HOST: mariadb
+  MAUTIC_DB_PORT: "3306"
+  MAUTIC_DB_DATABASE: ${DB_NAME:-mautic}
+  MAUTIC_DB_USER: ${DB_USER:-mautic}
+  MAUTIC_DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+  SITE_URL: ${SITE_URL:-http://localhost:8080}
+  MAUTIC_MESSENGER_DSN_EMAIL: doctrine://default
+  MAUTIC_MESSENGER_DSN_HIT: doctrine://default
+  MAILER_DSN: ${MAILER_DSN:-smtp://mailpit:1025}
+  MAILER_FROM_EMAIL: ${MAILER_FROM_EMAIL:-}
+  MAILER_FROM_NAME: ${MAILER_FROM_NAME:-}
+  PHP_INI_VALUE_DATE_TIMEZONE: ${TZ:-UTC}
+
+services:
+  mariadb:
+    image: mariadb:11.4.13@sha256:a8992b5e5404d11e03c54a31d0c1bdea3fd116d283aa6d1a627551f29045309b
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
+      MARIADB_DATABASE: ${DB_NAME:-mautic}
+      MARIADB_USER: ${DB_USER:-mautic}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    command: ["mariadbd", "--datadir=/var/lib/mysql/data", "--skip-name-resolve"]
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      # TCP ping: fails while the entrypoint's temporary init server (no networking) runs
+      test: ["CMD-SHELL", "mariadb-admin ping --protocol=TCP -h 127.0.0.1 -u\"$${MARIADB_USER}\" -p\"$${MARIADB_PASSWORD}\" --silent"]
+      start_period: 20s
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mautic:
+    build: .
+    image: mautic-railway:local
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    environment:
+      <<: *mautic-env
+      DOCKER_MAUTIC_ROLE: mautic_web
+      PORT: "8080"
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?set ADMIN_EMAIL in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      TRUSTED_PROXIES: '["0.0.0.0/0","::/0"]'
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    volumes:
+      - mautic_config:/var/www/html/config
+      - mautic_media_files:/var/www/html/docroot/media/files
+      - mautic_media_images:/var/www/html/docroot/media/images
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8080/s/login"]
+      start_period: 300s
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  mautic_cron:
+    image: mautic-railway:local
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      mautic:
+        condition: service_started
+    environment:
+      <<: *mautic-env
+      DOCKER_MAUTIC_ROLE: mautic_cron
+
+  mautic_worker:
+    image: mautic-railway:local
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      mautic:
+        condition: service_started
+    environment:
+      <<: *mautic-env
+      DOCKER_MAUTIC_ROLE: mautic_worker
+
+  mailpit:
+    image: axllent/mailpit:v1.33.1@sha256:aef2aacc11f075ec0fb6874275ee4a421e688e11a96ebb296134d1735c7761ce
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_PORT:-8025}:8025"
+
+volumes:
+  mariadb_data:
+  mautic_config:
+  mautic_media_files:
+  mautic_media_images:

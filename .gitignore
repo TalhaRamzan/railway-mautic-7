@@ -1,0 +1,15 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Local data / dumps
+*.sql
+*.sql.gz
+backups/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp

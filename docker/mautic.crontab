@@ -1,0 +1,45 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+BASH_ENV=/tmp/cron.env
+
+# Mautic cron schedule for the "mautic_cron" service (runs as www-data, times are UTC).
+# Replaces the upstream /templates/mautic_cron, which only runs segments + campaigns.
+# Jobs are staggered so two heavy PHP processes rarely overlap (keeps RAM low).
+
+# Pull config/local.php saved by the web service (UI settings, secret key) - every minute
+* * * * * /usr/local/bin/mautic-config-sync pull 2>&1 | tee /tmp/stdout
+
+# Segments - every 15 min
+0,15,30,45 * * * * php /var/www/html/bin/console mautic:segments:update 2>&1 | tee /tmp/stdout
+
+# Campaign membership - every 15 min, 5 past
+5,20,35,50 * * * * php /var/www/html/bin/console mautic:campaigns:update 2>&1 | tee /tmp/stdout
+
+# Campaign events - every 15 min, 10 past
+10,25,40,55 * * * * php /var/www/html/bin/console mautic:campaigns:trigger 2>&1 | tee /tmp/stdout
+
+# Segment (broadcast) emails and other scheduled broadcasts - every 5 min
+# (missing from the upstream image: without it segment emails are never sent)
+2,7,12,17,22,27,32,37,42,47,52,57 * * * * php /var/www/html/bin/console mautic:broadcasts:send 2>&1 | tee /tmp/stdout
+
+# Marketing messages queue (frequency rules) - every 15 min
+3,18,33,48 * * * * php /var/www/html/bin/console mautic:messages:send 2>&1 | tee /tmp/stdout
+
+# Scheduled reports - hourly
+14 * * * * php /var/www/html/bin/console mautic:reports:scheduler 2>&1 | tee /tmp/stdout
+
+# Remove IP addresses no longer referenced - daily 04:23
+23 4 * * * php /var/www/html/bin/console mautic:unusedip:delete 2>&1 | tee /tmp/stdout
+
+# ---- Optional jobs: uncomment in a fork if you need them -------------------------------
+# Bounce/unsubscribe mailbox monitoring (needs IMAP settings in Configuration > Email)
+#*/5 * * * * php /var/www/html/bin/console mautic:email:fetch 2>&1 | tee /tmp/stdout
+# Webhooks, only if "Queue mode" is set to "Queue the requests" in Configuration > Webhooks
+#*/2 * * * * php /var/www/html/bin/console mautic:webhooks:process 2>&1 | tee /tmp/stdout
+# A/B test winner emails
+#*/30 * * * * php /var/www/html/bin/console mautic:email:sendwinner 2>&1 | tee /tmp/stdout
+# MaxMind GeoLite2 download (needs a MaxMind license key in Configuration > Miscellaneous)
+#30 3 * * 0 php /var/www/html/bin/console mautic:iplookup:download 2>&1 | tee /tmp/stdout
+# NOT supported in this multi-service layout: background contact import/export
+# (mautic:import, mautic:contacts:scheduled_export) - their files live on the web service.
+# Use "Import in browser" instead.

@@ -113,3 +113,12 @@ providers and sustained load.
 ## Cron schedule check (2026-11-21, 18:22–18:33 UTC)
 - PASS: cron fired on the clock without manual runs: `mautic:broadcasts:send` (at :27 and :32, output table "Channel / # sent / # failed") and `mautic:messages:send` (at :33, "Messages sent: 0"). `segments:update` (:30) produced no output on an empty install, which is normal.
 - PASS: no errors or exceptions in cron or worker logs during the window.
+
+## Railway deploy results (2026-11-21, Hobby plan, project created 19:44 UTC, deleted 20:12 UTC)
+- FOUND + FIXED: first deploy failed the healthcheck with `AH00534: apache2: Configuration error: More than one MPM loaded`. Railway's runtime had `mpm_event` enabled next to `mpm_prefork` (known Railway issue with php/apache images). Fix in `docker/railway-entrypoint.sh` (commit b05563a): the web role removes `mpm_event`/`mpm_worker` from `mods-enabled` before Apache starts. Redeploy log: "disabling extra Apache MPM: mpm_event" → Apache "resuming normal operations" → deployment SUCCESS.
+- PASS: MariaDB from the pinned image digest with custom start command (`--datadir=/var/lib/mysql/data`) and volume.
+- PASS: web, cron and worker build from this repo; references `${{MariaDB.*}}`, nested `${{Mautic.SITE_URL}}`, `${{secret(...)}}` resolve.
+- PASS: auto-install on first boot; installer locked afterwards (`/installer` → 302 to dashboard); `/s/login` 200; tracking pixel `/mtracking.gif` 200.
+- PASS: cron pulled `local.php` from the DB (config sync works on Railway) and fired `mautic:broadcasts:send` on schedule (20:12); worker consumers RUNNING for email/hit/failed.
+- Measured RAM on Railway (idle): Mautic web ~140 MB, Worker ~136 MB, Cron ~5 MB (spikes during jobs), MariaDB ~187 MB → ~0.47 GB ≈ $5/month RAM.
+- Not tested on Railway (passed locally): admin login in the browser, sending through a real API mail provider.

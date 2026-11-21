@@ -147,7 +147,7 @@ can add webhook-based bounce handling later.
 
 Railway bills usage: RAM about $10 per GB-month, CPU about $20 per vCPU-month, volumes about
 $0.15 per GB-month (check [railway.com/pricing](https://railway.com/pricing); prices can change).
-Idle footprint measured in a local run (see [TEST.md](TEST.md) section 5). Railway numbers still need confirming:
+Idle footprint measured in a local run (see [TEST.md](TEST.md) section 5). A Railway test deploy measured ~0.47 GB idle in total (web ~140 MB, worker ~136 MB, cron ~5 MB, MariaDB ~187 MB), about $5/month of RAM:
 
 | Service | Idle RAM (measured locally) | Notes |
 |---|---|---|

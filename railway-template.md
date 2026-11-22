@@ -16,6 +16,18 @@ Random secrets use an explicit alphanumeric alphabet so they never need escaping
 `ALNUM` below means `"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"`,
 e.g. `${{secret(32, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")}}`.
 
+> **Published template:** https://railway.com/deploy/mautic-7 (published 2026-11-22).
+>
+> **How the published version was built** (Railway's template generator keeps only variables containing `${{...}}`
+> and drops plain values): generated from a project with placeholder images, then the three Mautic services were
+> switched to this GitHub repo in the template composer. Template variables are only secrets and references:
+> `Mautic`: `SITE_URL`, `MAUTIC_DB_HOST`, `MAUTIC_DB_PASSWORD`, `ADMIN_PASSWORD`; cron/worker reference `Mautic.SITE_URL`
+> and `Mautic.MAILER_*`. DB name/user/port, admin username, trusted proxies and timezone default in the Dockerfile;
+> `ADMIN_EMAIL` defaults to `admin@example.com`. The role comes from each service's start command
+> (`/bin/sh -c "export DOCKER_MAUTIC_ROLE=mautic_cron; exec /usr/local/bin/railway-entrypoint.sh"`).
+> MariaDB's start command exports `MARIADB_DATABASE`/`MARIADB_USER` defaults. Railway injects `PORT=8080`; domain targets 8080.
+> No healthcheck on the web service. Verified by deploying the template itself into an empty project with zero inputs.
+
 ---
 
 ## 1. Service `MariaDB`

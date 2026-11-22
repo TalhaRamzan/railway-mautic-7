@@ -14,7 +14,7 @@ alternative to HubSpot / ActiveCampaign / Mailchimp automations) as a Railway te
 > Mautic is GPL-3.0 software by its contributors; this repository only contains deployment
 > files (MIT, see [LICENSE](LICENSE)).
 
-**Deploy:** `[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/REPLACE_WITH_TEMPLATE_CODE)`
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/mautic-7)
 
 ---
 

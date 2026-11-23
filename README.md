@@ -136,10 +136,28 @@ Rules for the DSN:
 - Test with *Configuration > Email Settings > Send test email*, then send a real email to
   yourself from a segment to exercise the worker.
 
-**Bounces and complaints:** these API bridges send mail; they do not feed bounces back into
-Mautic automatically. Use your provider's suppression list, or configure IMAP bounce
-monitoring (enable `mautic:email:fetch` in a fork). A dedicated Mautic transport plugin
-can add webhook-based bounce handling later.
+### Bounces, complaints and unsubscribes
+
+The API transports above are **send-only**. Mautic hands each message to the provider and
+gets an "accepted" back; nothing flows the other way. Hard bounces, spam complaints and
+unsubscribes made through the provider (for example a one-click `List-Unsubscribe` handled
+by the provider) are **not** fed back into Mautic, so those contacts stay "active" and keep
+getting campaign emails.
+
+That is fine for testing and small lists. For production sending, pick one of these:
+
+- **A Mautic provider plugin** with webhook feedback, for example the Amazon SES or
+  SendGrid integrations from the Mautic Marketplace (*Settings > Marketplace*) or the
+  provider's own plugin. They point the provider's bounce/complaint webhook (or SNS
+  topic for SES) at your Mautic URL and mark contacts as bounced/unsubscribed. Marketplace
+  plugins installed from the UI are lost on redeploy, so add the plugin to the `Dockerfile`
+  (see [Limitations](#limitations)) and check that it supports Mautic 7.
+- **IMAP bounce monitoring:** point the provider's bounce/return-path address at a mailbox,
+  set it under *Configuration > Email Settings > Monitored inbox*, and enable the commented
+  `mautic:email:fetch` job in [`docker/mautic.crontab`](docker/mautic.crontab) in your fork.
+- At minimum, keep the provider's **suppression list** on (it stops resends to bounced
+  addresses even though Mautic does not know about them) and watch its bounce/complaint
+  rates.
 
 ---
 
@@ -186,8 +204,8 @@ tracking traffic use more CPU and RAM. To keep the bill predictable:
 | `ADMIN_PASSWORD` | `${{secret(24, ...)}}` | Random. First boot only. |
 | `MAILER_DSN` | *(empty)* | HTTP API transport, see [Email setup](#email-setup-required-to-send). |
 | `MAILER_FROM_EMAIL` / `MAILER_FROM_NAME` | *(empty)* | Default sender. Empty = managed in the UI. |
-| `TRUSTED_PROXIES` | `["0.0.0.0/0","::/0"]` | JSON list. Needed so Mautic sees HTTPS behind Railway's proxy. |
-| `TRUSTED_HOSTS` | *(unset)* | Optional JSON list of allowed host names (regex), e.g. `["^mautic\\.example\\.com$"]`. |
+| `TRUSTED_PROXIES` | `["0.0.0.0/0","::/0"]` | JSON list. Needed so Mautic sees HTTPS behind Railway's proxy. Narrow it outside Railway, see [Trusted proxies and hosts](#trusted-proxies-and-hosts-non-railway-or-custom-setups). |
+| `TRUSTED_HOSTS` | *(unset)* | Optional JSON list of allowed host names (regex), e.g. `["^mautic\\.example\\.com$"]`. Keep `^healthcheck\\.railway\\.app$` in it on Railway. |
 | `PHP_INI_VALUE_DATE_TIMEZONE` | `UTC` | PHP timezone. |
 | `PHP_INI_VALUE_MEMORY_LIMIT` | `512M` | Per PHP process. |
 | `APACHE_MAX_REQUEST_WORKERS` | `10` (image default) | Max concurrent PHP requests; main RAM cap of the web service. |
@@ -245,7 +263,8 @@ next boot.
   is not on the volume). Add them to the `Dockerfile` instead (see the upstream
   "custom-plugins" example).
 - **One web replica.** The volume prevents horizontal scaling of the web service.
-- Bounce handling via provider webhooks is not wired up (see [Email setup](#email-setup-required-to-send)).
+- Bounce, complaint and unsubscribe feedback from the provider is not wired up (see
+  [Bounces, complaints and unsubscribes](#bounces-complaints-and-unsubscribes)).
 
 ---
 
@@ -281,6 +300,17 @@ migrations run on start. Rehearse this on a copy before doing it for real.
 
 Data lives in two places: the **MariaDB volume** (everything important) and the **web
 volume** (`/data`: `config/local.php` and uploaded media).
+
+> **Treat database backups like secrets.** Because `config/local.php` is synced through
+> the database (table `railway_config_sync`, see
+> [How config reaches cron and worker](#how-config-reaches-cron-and-worker)), every dump
+> or volume backup of MariaDB contains Mautic's **secret key** together with the data it
+> encrypts (plugin/integration credentials), plus any mail transport settings saved in
+> the UI, which can include the provider API key. Anyone with the dump can read those.
+> Store dumps encrypted (for example `gpg -c` or an encrypted bucket), keep them off
+> shared drives and chat, delete old ones, and rotate the provider API key if a dump
+> leaks. Keys set only in the `MAILER_DSN` variable live in Railway, not in the dump,
+> unless you also save *Email Settings* in the UI.
 
 - Enable Railway volume backups on both volumes (service > Backups), if your plan has them.
 - Logical dump: temporarily enable **TCP Proxy** on the MariaDB service (Settings >
@@ -321,6 +351,41 @@ Railway's runtime can end up with a second Apache MPM enabled next to `mpm_prefo
 Add the domain to the **Mautic** service, then set `SITE_URL=https://your.domain` on the
 Mautic service. Cron and worker reference it; redeploy all three services. Links in emails
 already sent keep the old domain, so keep the Railway domain working too.
+
+### Trusted proxies and hosts (non-Railway or custom setups)
+
+`TRUSTED_PROXIES` tells Mautic which upstream addresses may set `X-Forwarded-For` /
+`X-Forwarded-Proto`. The template default, `["0.0.0.0/0","::/0"]`, trusts every address.
+That is acceptable on Railway because the container has no public port: all traffic arrives
+through Railway's edge, which has no fixed, documented address range. Anywhere else it is
+too broad: if clients can reach Mautic directly, they can spoof their IP (contact tracking, IP
+lookups, IP-based rules) and the HTTPS scheme.
+
+If you run this image behind your own reverse proxy, on a VPS, or behind another platform,
+narrow it to the proxy's address(es), as a JSON list of IPs or CIDRs:
+
+| Setup | `TRUSTED_PROXIES` |
+|---|---|
+| nginx/Caddy/Traefik on the same host, Mautic published on localhost | `["127.0.0.1","::1"]` |
+| Proxy on a Docker network | the network's subnet, e.g. `["172.18.0.0/16"]` (`docker network inspect <net>`) |
+| Cloudflare in front, origin firewalled to Cloudflare | Cloudflare's published ranges ([cloudflare.com/ips](https://www.cloudflare.com/ips/)) |
+| Load balancer in a private VPC | the VPC/subnet CIDR, e.g. `["10.0.0.0/16"]` |
+
+`TRUSTED_HOSTS` (unset by default) limits which `Host` headers Mautic answers, which blocks
+host-header tricks such as poisoned password-reset links. Values are regular expressions
+in a JSON list. Escape dots and anchor them:
+
+```
+TRUSTED_HOSTS=["^mautic\\.example\\.com$","^[a-z0-9-]+\\.up\\.railway\\.app$","^healthcheck\\.railway\\.app$"]
+```
+
+- Include **every** domain that serves Mautic (custom domain and, while emails with old
+  links are out there, the Railway domain). Requests for other hosts get HTTP 400.
+- On Railway keep the `healthcheck.railway.app` entry: Railway's healthcheck sends that
+  `Host` header, and without it every deploy fails its healthcheck.
+- Both variables are read on container start (into `parameters_local.php`); redeploy the
+  Mautic service after changing them. Invalid JSON stops the container with an error in
+  the deploy log.
 
 ---
 

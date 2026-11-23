@@ -122,3 +122,12 @@ providers and sustained load.
 - PASS: cron pulled `local.php` from the DB (config sync works on Railway) and fired `mautic:broadcasts:send` on schedule (20:12); worker consumers RUNNING for email/hit/failed.
 - Measured RAM on Railway (idle): Mautic web ~140 MB, Worker ~136 MB, Cron ~5 MB (spikes during jobs), MariaDB ~187 MB → ~0.47 GB ≈ $5/month RAM.
 - Not tested on Railway (passed locally): admin login in the browser, sending through a real API mail provider.
+
+## Railway re-test: published template + Brevo API path (2026-11-23, Hobby plan, project created 05:33 UTC, deleted 05:42 UTC)
+Deployed the **published** template (`railway deploy -t mautic-7`) into an empty project, no inputs.
+- PASS: zero-input deploy; MariaDB, Mautic, Mautic Cron and Mautic Worker all SUCCESS about 2 min after the deploy started. Web log: `disabling extra Apache MPM: mpm_event`, Apache running, migrations "Already at the latest version"; `/s/login` 200 over HTTPS.
+- PASS: config sync on Railway: web `pushed local.php (61d3904d9596)`, cron `pulled local.php (61d3904d9596)` (same hash). Worker consumers for `email`, `hit` and `failed` running.
+- PASS: setting `MAILER_DSN` / `MAILER_FROM_EMAIL` / `MAILER_FROM_NAME` on the Mautic service only redeployed web, cron and worker, and all three wrote them into `parameters_local.php` (reference variables work).
+- PASS: Brevo bridge end to end, without a real key: `MAILER_DSN=brevo+api://placeholder-invalid-key@<echo host>` (Symfony bridges accept a custom host instead of `default`), where `<echo host>` was a temporary request-logging service in the same project. A password-reset email (routed to the `email` queue by Mautic's messenger config) arrived as `POST /v3/smtp/email` with header `api-key`, Brevo JSON body (sender, to, subject, text + HTML with the `https://` reset link) and user agent `Symfony HttpClient`. The echo reply has no `messageId`, so the bridge treated it as a failure and messenger retried once (second identical request), then the queue table was empty again.
+- Note: worker stdout only shows consumer start/stop; send errors go to Mautic's file log (`var/logs`), not Railway logs.
+- PENDING: delivery through Brevo with the user's real API key (the user will add the key later), and a segment email sent by cron + worker to a real inbox. Not run here; the test project was deleted right after the checks above to avoid cost.
